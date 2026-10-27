@@ -117,6 +117,9 @@
       "memory_usage": {
         "name": "Использование памяти"
       },
+      "disk_capacity": {
+        "name": "Объем {disk_name}"
+      },
       "memory_used": {
         "name": "Использовано памяти"
       }
