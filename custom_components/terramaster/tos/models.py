@@ -129,6 +129,21 @@ class Disk:
     def healthy(self) -> bool | None:
         return None if self.status is None else self.status == 0
 
+    @property
+    def capacity_bytes(self) -> int | None:
+        """Convert the string capacity (e.g., '12.0 TB') to bytes."""
+        if not self.capacity:
+            return None
+        
+        match = _SIZE_STRING_RE.search(self.capacity)
+        if not match:
+            return None
+            
+        value = float(match.group(1))
+        unit = match.group(2).upper()
+        
+        return int(value * _UNIT_MULTIPLIER.get(unit, 1))
+
 
 @dataclass(slots=True)
 class Volume:
@@ -234,7 +249,6 @@ def build_disks(status: Any, listing: Any, overview: Any) -> list[Disk]:
                 break
 
     # 3. Разделяем на HDD и NVMe
-    # Теперь HDD (длина 8) и NVMe (длина > 8) точно разделены.
     hdds = [d for d in disks if len(d.device) == 8]
     nvmes = [d for d in disks if len(d.device) > 8]
 
@@ -255,11 +269,8 @@ def build_disks(status: Any, listing: Any, overview: Any) -> list[Disk]:
         for i, hdd in enumerate(hdds):
             hdd.capacity = available_capacities[i]
     else:
-        # Если не совпало, берем из overview по их изначальному слоту
         slot_caps = {ov.get("slot"): ov.get("factory_capacity") for ov in overview_slots if isinstance(ov, dict)}
         for hdd in hdds:
-            # Восстанавливаем оригинальный слот для поиска (1, 2, 3)
-            # (Мы не меняли его для HDD, так что hdd.slot правильный)
             cap = slot_caps.get(hdd.slot)
             if cap and cap != "256 GB":
                 hdd.capacity = cap
@@ -315,10 +326,7 @@ def build_pools(payload: Any) -> list[Pool]:
 
 
 def build_cpu(payload: Any) -> tuple[float | None, dict[str, float]]:
-    """Aggregate CPU percentage plus per-core values.
-
-    ``cpu`` is the overall figure; ``cpu0``..``cpuN`` are the individual cores.
-    """
+    """Aggregate CPU percentage plus per-core values."""
     data = _unwrap(payload) or {}
     if not isinstance(data, dict):
         return None, {}
