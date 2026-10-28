@@ -31,7 +31,7 @@ Developed and tested:
   - **F4-423** running **TOS 7**
   
 The integration talks to the
-TOS web API rather than anything model-specific, so other TOS 6 units should work and
+TOS web API rather than anything model-specific, so other TOS 6,7 units should work and
 the number of drive entities follows the number of bays. Reports welcome.
 
 TOS 5 and earlier are not supported.
