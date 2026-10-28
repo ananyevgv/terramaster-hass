@@ -27,8 +27,8 @@ locally, with no cloud account.
 
 Developed and tested:
 
-  **F4-425** running **TOS 6** 
-  **F4-423** running **TOS 7**
+  - **F4-425** running **TOS 6**
+  - **F4-423** running **TOS 7**
   
 The integration talks to the
 TOS web API rather than anything model-specific, so other TOS 6 units should work and
