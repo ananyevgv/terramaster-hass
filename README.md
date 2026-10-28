@@ -72,15 +72,15 @@ default interval is 60 seconds.
 
 | Entity | Notes |
 |---|---|
-| `sensor` HDD*n* temperature | One per bay, with model, serial and capacity as attributes |
-| `sensor` HDD*n* power-on hours | Diagnostic |
+| `sensor` HDD*n* NVME*n* temperature | One per bay, with model, serial and capacity as attributes |
+| `sensor` HDD*n*  NVME*n* power-on hours | Diagnostic |
 | `sensor` CPU / System temperature | |
 | `sensor` CPU usage | Percentage, with per-core load as attributes |
 | `sensor` Memory usage / Memory used | Percentage and bytes; total as an attribute |
 | `sensor` Hottest disk | Highest drive temperature — the one to automate on |
 | `sensor` Fan speed | RPM |
 | `sensor` Volume / Pool total, used, free, usage | Per volume and per pool |
-| `binary_sensor` HDD*n* problem | On when TOS reports a fault |
+| `binary_sensor` HDD*n*  NVME*n* problem | On when TOS reports a fault |
 | `select` Fan mode | Automatic, Low, Medium, Full |
 
 ### Fan control
