@@ -61,6 +61,9 @@
     "binary_sensor": {
       "disk_problem": {
         "name": "Проблема {disk_name}"
+      },
+      "link_status": {
+        "name": "Сетевое подключение"
       }
     },
     "select": {
@@ -93,6 +96,9 @@
       "disk_power_on_hours": {
         "name": "Наработка {disk_name}"
       },
+      "disk_capacity": {
+        "name": "Объем {disk_name}"
+      },
       "volume_total": {
         "name": "Всего {volume_name}"
       },
@@ -117,11 +123,20 @@
       "memory_usage": {
         "name": "Использование памяти"
       },
-      "disk_capacity": {
-        "name": "Объем {disk_name}"
-      },
       "memory_used": {
         "name": "Использовано памяти"
+      },
+      "network_interface_ip": {
+        "name": "IP-адрес {interface}"
+      },
+      "network_interface_speed": {
+        "name": "Скорость {interface}"
+      },
+      "tos_version": {
+        "name": "Версия TOS"
+      },
+      "uptime": {
+        "name": "Время работы"
       }
     }
   },

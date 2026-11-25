@@ -52,7 +52,7 @@
         "data_description": {
           "scan_interval": "Seconds between updates. Reading temperatures runs SMART queries on the NAS and takes a few seconds, so values below 30 add load for little benefit.",
           "overheat_protection": "If the hottest drive reaches the threshold while the fan is in a fixed mode, switch it back to Automatic. A fixed mode disables the firmware's own temperature ramp, so this prevents the drives from cooking.",
-          "overheat_celsius": "Temperature at which automatic fan control is restored. TerraMaster warns about drive life above 55 \u00b0C."
+          "overheat_celsius": "Temperature at which automatic fan control is restored. TerraMaster warns about drive life above 55 °C."
         }
       }
     }
@@ -61,6 +61,9 @@
     "binary_sensor": {
       "disk_problem": {
         "name": "{disk_name} problem"
+      },
+      "link_status": {
+        "name": "Network link"
       }
     },
     "select": {
@@ -93,6 +96,9 @@
       "disk_power_on_hours": {
         "name": "{disk_name} power-on hours"
       },
+      "disk_capacity": {
+        "name": "{disk_name} capacity"
+      },
       "volume_total": {
         "name": "{volume_name} total"
       },
@@ -117,11 +123,20 @@
       "memory_usage": {
         "name": "Memory usage"
       },
-      "disk_capacity": {
-        "name": "{disk_name} capacity"
-      },
       "memory_used": {
         "name": "Memory used"
+      },
+      "network_interface_ip": {
+        "name": "IP address {interface}"
+      },
+      "network_interface_speed": {
+        "name": "Speed {interface}"
+      },
+      "tos_version": {
+        "name": "TOS version"
+      },
+      "uptime": {
+        "name": "Uptime"
       }
     }
   },
