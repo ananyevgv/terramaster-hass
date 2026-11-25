@@ -119,6 +119,9 @@ class Disk:
     power_on_hours: int | None = None
     status: int | None = None
     capacity: str | None = None
+    # --- I/O speed ---
+    read_speed: float | None = None
+    write_speed: float | None = None
 
     @property
     def unique_key(self) -> str:
@@ -134,15 +137,22 @@ class Disk:
         """Convert the string capacity (e.g., '12.0 TB') to bytes."""
         if not self.capacity:
             return None
-        
         match = _SIZE_STRING_RE.search(self.capacity)
         if not match:
             return None
-            
         value = float(match.group(1))
         unit = match.group(2).upper()
-        
         return int(value * _UNIT_MULTIPLIER.get(unit, 1))
+
+
+@dataclass(slots=True)
+class NetworkInterface:
+    """One network interface with its IP, speed and status."""
+    name: str
+    ip: str | None = None
+    speed_mbps: int | None = None
+    is_up: bool = False
+    has_gateway: bool = False
 
 
 @dataclass(slots=True)
@@ -171,7 +181,9 @@ class Pool:
 @dataclass(slots=True)
 class NasData:
     """Everything one coordinator refresh gathers."""
-
+    update_available: bool | None = None
+    update_version: str | None = None
+    update_release_notes: str | None = None
     fan_is_auto: bool | None = None
     fan_level: int | None = None
     fan_rpm: int | None = None
@@ -188,6 +200,10 @@ class NasData:
     disks: list[Disk] = field(default_factory=list)
     volumes: list[Volume] = field(default_factory=list)
     pools: list[Pool] = field(default_factory=list)
+    # --- NEW ---
+    network_interfaces: list[NetworkInterface] = field(default_factory=list)
+    tos_version: str | None = None
+    uptime_seconds: int | None = None
 
     @property
     def max_disk_temperature(self) -> float | None:
@@ -202,23 +218,29 @@ def _unwrap(payload: Any) -> Any:
     return payload
 
 
-def build_disks(status: Any, listing: Any, overview: Any) -> list[Disk]:
+def build_disks(
+    status: Any, listing: Any, overview: Any, speed_data: Any = None
+) -> list[Disk]:
     """Merge the disk endpoints, separating HDD and NVMe and fixing slot conflicts."""
     
     disks: list[Disk] = []
 
     # 1. Собираем базовую информацию из status
     for entry in _unwrap(status) or []:
-        if not isinstance(entry, dict) or entry.get("device") is None:
+        if not isinstance(entry, dict) or not entry.get("device") or not entry.get("name"):
             continue
             
         device = str(entry.get("device"))
-        name = entry.get("name") or "Unknown Disk"
+        name = entry.get("name")
+        
+        # Пропускаем явно пустые/неизвестные диски (лечит сенсоры tnas_0)
+        if name.lower() == "unknown disk" or not name.strip():
+            continue
+
         original_slot = entry.get("slot") or 0
         
         # ИСПРАВЛЕНИЕ КОНФЛИКТА: Если это NVMe, меняем ему слот на 90+.
-        # Это предотвратит дублирование сущностей в Home Assistant.
-        if "NVMe" in name or len(device) > 8:  # /dev/sdza имеет 9 символов
+        if "NVMe" in name or len(device) > 8:
             if "1" in name or device == "/dev/sdza":
                 slot = 90
             elif "2" in name or device == "/dev/sdzb":
@@ -247,6 +269,30 @@ def build_disks(status: Any, listing: Any, overview: Any) -> list[Disk]:
             if disk.device == device:
                 disk.model = entry.get("model")
                 break
+
+    # 2.5. Добавляем I/O скорость, если есть (GetDiskListSpeedData)
+    if speed_data:
+        speed_list = _unwrap(speed_data) or []
+        if isinstance(speed_list, dict):
+            speed_list = [speed_list]
+        for s_disk in speed_list:
+            dev = s_disk.get("device")
+            if not dev:
+                continue
+            for d in disks:
+                if d.device == dev:
+                    # Ищем поля read/write под разными возможными именами
+                    d.read_speed = (
+                        s_disk.get("read_speed")
+                        or s_disk.get("read")
+                        or s_disk.get("readSpeed")
+                    )
+                    d.write_speed = (
+                        s_disk.get("write_speed")
+                        or s_disk.get("write")
+                        or s_disk.get("writeSpeed")
+                    )
+                    break
 
     # 3. Разделяем на HDD и NVMe
     hdds = [d for d in disks if len(d.device) == 8]
@@ -345,7 +391,7 @@ def build_memory(payload: Any) -> tuple[float | None, int | None, int | None]:
     data = _unwrap(payload) or {}
     if not isinstance(data, dict):
         return None, None, None
-    percent = latest_sample((data.get("RealtimeUseage") or {}).get("mem"))
+    percent = latest_sample((data.get("RealtimeUsage") or {}).get("mem"))
     absolute = data.get("Memory") or {}
     return (
         percent,

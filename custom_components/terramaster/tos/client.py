@@ -266,3 +266,28 @@ class TosClient:
 
     async def volumes(self) -> dict[str, Any]:
         return await self.get("/storage/list/volume")
+
+    # --- NEW ENDPOINTS ---
+    async def network(self) -> dict[str, Any]:
+        """Network interfaces, IP addresses and link speed."""
+        return await self.get("/networkSet/GetInterfaceList")
+
+    async def system(self) -> dict[str, Any]:
+        """System info: TOS version, device ID, uptime."""
+        return await self.get("/system/board/system")
+
+    async def disk_speed(self) -> dict[str, Any]:
+        """Disk I/O speed (read/write)."""
+        return await self.get("/disk/GetDiskListSpeedData")
+
+    async def disk_speed(self) -> dict[str, Any]:
+        """Disk I/O speed (read/write)."""
+        return await self.get("/disk/GetDiskListSpeedData")
+
+    async def check_updates(self) -> dict[str, Any]:
+        """Check if a TOS update is available."""
+        return await self.get("/update/check")
+
+    async def install_update(self) -> dict[str, Any]:
+        """Start the TOS update process."""
+        return await self.post("/update/install", {})
