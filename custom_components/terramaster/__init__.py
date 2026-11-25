@@ -20,6 +20,8 @@ PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
     Platform.SELECT,
     Platform.SENSOR,
+    Platform.UPDATE,  
+
 ]
 
 type TerraMasterConfigEntry = ConfigEntry[TerraMasterCoordinator]

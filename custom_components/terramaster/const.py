@@ -43,3 +43,18 @@ CONF_OVERHEAT_CELSIUS: Final = "overheat_celsius"
 DEFAULT_OVERHEAT_PROTECTION: Final = True
 # TOS's own overheat warning threshold (frontend string sot_temperatureHeight).
 DEFAULT_OVERHEAT_CELSIUS: Final = 55.0
+
+# --- NEW: services controllable via switches ---
+SERVICE_SMB: Final = "smb"
+SERVICE_NFS: Final = "nfs"
+SERVICE_SSH: Final = "ssh"
+CONTROLLABLE_SERVICES: Final = [SERVICE_SMB, SERVICE_NFS, SERVICE_SSH]
+
+# Link speed enum options (Mbps -> human label).
+LINK_SPEED_OPTIONS: Final = {
+    100: "100 Mbps",
+    1000: "1 Gbps",
+    2500: "2.5 Gbps",
+    5000: "5 Gbps",
+    10000: "10 Gbps",
+}

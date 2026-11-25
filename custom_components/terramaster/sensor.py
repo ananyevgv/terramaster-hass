@@ -25,9 +25,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import TerraMasterConfigEntry
 from .coordinator import TerraMasterCoordinator
 from .entity import TerraMasterDiskEntity, TerraMasterEntity
-from .tos.models import NasData
+from .tos.models import NasData, NetworkInterface
 
-# Everything comes from one coordinator refresh, so there is nothing to limit.
 PARALLEL_UPDATES = 0
 
 CAPACITY = {
@@ -40,8 +39,6 @@ CAPACITY = {
 
 @dataclass(frozen=True, kw_only=True)
 class TerraMasterSensorDescription(SensorEntityDescription):
-    """A sensor plus how to pull its value out of :class:`NasData`."""
-
     value_fn: Callable[[NasData], float | int | str | None]
 
 
@@ -53,6 +50,7 @@ SYSTEM_SENSORS: tuple[TerraMasterSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.cpu_temperature,
+        icon="mdi:cpu-64-bit",
     ),
     TerraMasterSensorDescription(
         key="system_temperature",
@@ -61,6 +59,7 @@ SYSTEM_SENSORS: tuple[TerraMasterSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.system_temperature,
+        icon="mdi:thermometer",
     ),
     TerraMasterSensorDescription(
         key="max_disk_temperature",
@@ -69,6 +68,7 @@ SYSTEM_SENSORS: tuple[TerraMasterSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.max_disk_temperature,
+        icon="mdi:thermometer-alert",
     ),
     TerraMasterSensorDescription(
         key="cpu_usage",
@@ -77,6 +77,7 @@ SYSTEM_SENSORS: tuple[TerraMasterSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
         value_fn=lambda data: data.cpu_percent,
+        icon="mdi:cpu-64-bit",
     ),
     TerraMasterSensorDescription(
         key="memory_usage",
@@ -85,6 +86,7 @@ SYSTEM_SENSORS: tuple[TerraMasterSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
         value_fn=lambda data: data.memory_percent,
+        icon="mdi:memory",
     ),
     TerraMasterSensorDescription(
         key="memory_used",
@@ -95,6 +97,7 @@ SYSTEM_SENSORS: tuple[TerraMasterSensorDescription, ...] = (
         suggested_display_precision=0,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.memory_used,
+        icon="mdi:memory",
     ),
     TerraMasterSensorDescription(
         key="fan_speed",
@@ -102,10 +105,28 @@ SYSTEM_SENSORS: tuple[TerraMasterSensorDescription, ...] = (
         native_unit_of_measurement=REVOLUTIONS_PER_MINUTE,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.fan_rpm,
+        icon="mdi:fan",
+    ),
+    #TerraMasterSensorDescription(
+    #    key="tos_version",
+    #    translation_key="tos_version",
+    #    entity_category=EntityCategory.DIAGNOSTIC,
+    #    value_fn=lambda data: data.tos_version,
+    #    icon="mdi:information-outline",
+    #),
+    TerraMasterSensorDescription(
+        key="uptime",
+        translation_key="uptime",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        suggested_unit_of_measurement=UnitOfTime.HOURS,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.uptime_seconds,
+        icon="mdi:clock-outline",
     ),
 )
 
-# translation_key -> (attribute on Volume, extra entity kwargs)
 VOLUME_SENSORS: dict[str, tuple[str, dict]] = {
     "volume_total": ("total", CAPACITY),
     "volume_used": ("used", CAPACITY),
@@ -114,8 +135,8 @@ VOLUME_SENSORS: dict[str, tuple[str, dict]] = {
 }
 
 POOL_SENSORS: dict[str, tuple[str, dict]] = {
-    "pool_total": ("total", CAPACITY),
-    "pool_free": ("free", CAPACITY),
+  #  "pool_total": ("total", CAPACITY),
+  #  "pool_free": ("free", CAPACITY),
 }
 
 
@@ -124,7 +145,6 @@ async def async_setup_entry(
     entry: TerraMasterConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up sensors from a config entry."""
     coordinator = entry.runtime_data
     data = coordinator.data
 
@@ -136,6 +156,9 @@ async def async_setup_entry(
         entities.append(TerraMasterDiskTemperature(coordinator, disk))
         entities.append(TerraMasterDiskPowerOnHours(coordinator, disk))
         entities.append(TerraMasterDiskCapacity(coordinator, disk))
+        # Сенсоры скорости дисков (раскомментируйте, если нужно)
+        # entities.append(TerraMasterDiskReadSpeed(coordinator, disk))
+        # entities.append(TerraMasterDiskWriteSpeed(coordinator, disk))
 
     entities.extend(
         TerraMasterVolumeSensor(coordinator, volume, key)
@@ -148,12 +171,18 @@ async def async_setup_entry(
         for key in POOL_SENSORS
     )
 
+    # --- NEW: sensors for each network interface ---
+    for iface in data.network_interfaces:
+        # Пропускаем пустые интерфейсы (PPPoE и т.д.)
+        if not iface.ip and not iface.speed_mbps:
+            continue
+        entities.append(TerraMasterNetworkIpSensor(coordinator, iface))
+        entities.append(TerraMasterNetworkSpeedSensor(coordinator, iface))
+
     async_add_entities(entities)
 
 
 class TerraMasterSensor(TerraMasterEntity, SensorEntity):
-    """A whole-device sensor described by :class:`TerraMasterSensorDescription`."""
-
     entity_description: TerraMasterSensorDescription
 
     def __init__(
@@ -170,7 +199,6 @@ class TerraMasterSensor(TerraMasterEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, object] | None:
-        """Per-core load on the CPU sensor, total memory on the memory sensor."""
         data = self.coordinator.data
         if self.entity_description.key == "cpu_usage":
             return {"processor": data.processor, **data.cpu_per_core} or None
@@ -180,12 +208,11 @@ class TerraMasterSensor(TerraMasterEntity, SensorEntity):
 
 
 class TerraMasterDiskTemperature(TerraMasterDiskEntity, SensorEntity):
-    """Temperature of one physical drive."""
-
     _attr_translation_key = "disk_temperature"
     _attr_device_class = SensorDeviceClass.TEMPERATURE
     _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:harddisk"
 
     def __init__(self, coordinator: TerraMasterCoordinator, disk) -> None:
         super().__init__(coordinator, disk, "temperature")
@@ -196,7 +223,7 @@ class TerraMasterDiskTemperature(TerraMasterDiskEntity, SensorEntity):
         return disk.temperature if disk else None
 
     @property
-    def extra_state_attributes(self) -> dict[str, str | int | None] | None:
+    def extra_state_attributes(self) -> dict[str, str | int | float | None] | None:
         if (disk := self._disk) is None:
             return None
         return {
@@ -205,16 +232,17 @@ class TerraMasterDiskTemperature(TerraMasterDiskEntity, SensorEntity):
             "serial": disk.serial,
             "device": disk.device,
             "capacity": disk.capacity,
+            "read_speed": disk.read_speed,
+            "write_speed": disk.write_speed,
         }
 
 
 class TerraMasterDiskPowerOnHours(TerraMasterDiskEntity, SensorEntity):
-    """SMART power-on hours for one drive."""
-
     _attr_translation_key = "disk_power_on_hours"
     _attr_native_unit_of_measurement = UnitOfTime.HOURS
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:clock-outline"
 
     def __init__(self, coordinator: TerraMasterCoordinator, disk) -> None:
         super().__init__(coordinator, disk, "power_on_hours")
@@ -226,14 +254,13 @@ class TerraMasterDiskPowerOnHours(TerraMasterDiskEntity, SensorEntity):
 
 
 class TerraMasterDiskCapacity(TerraMasterDiskEntity, SensorEntity):
-    """Capacity of one physical drive."""
-
     _attr_translation_key = "disk_capacity"
     _attr_device_class = SensorDeviceClass.DATA_SIZE
     _attr_native_unit_of_measurement = UnitOfInformation.BYTES
     _attr_suggested_unit_of_measurement = UnitOfInformation.GIBIBYTES
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:database"
 
     def __init__(self, coordinator: TerraMasterCoordinator, disk) -> None:
         super().__init__(coordinator, disk, "capacity")
@@ -244,9 +271,57 @@ class TerraMasterDiskCapacity(TerraMasterDiskEntity, SensorEntity):
         return disk.capacity_bytes if disk else None
 
 
-class TerraMasterVolumeSensor(TerraMasterEntity, SensorEntity):
-    """Capacity metric for one volume."""
+# --- НОВЫЕ СЕНСОРЫ СКОРОСТИ ДИСКОВ (пока отключены в async_setup_entry) ---
 
+class TerraMasterDiskReadSpeed(TerraMasterDiskEntity, SensorEntity):
+    """Read speed of one physical drive."""
+    _attr_translation_key = "disk_read_speed"
+    _attr_native_unit_of_measurement = "B/s"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_suggested_unit_of_measurement = UnitOfInformation.KIBIBYTES
+    _attr_icon = "mdi:download"
+
+    def __init__(self, coordinator: TerraMasterCoordinator, disk) -> None:
+        super().__init__(coordinator, disk, "read_speed")
+
+    @property
+    def native_value(self) -> int | None:
+        disk = self._disk
+        if not disk or disk.read_speed is None:
+            return None
+        try:
+            return int(disk.read_speed)
+        except (ValueError, TypeError):
+            return None
+
+
+class TerraMasterDiskWriteSpeed(TerraMasterDiskEntity, SensorEntity):
+    """Write speed of one physical drive."""
+    _attr_translation_key = "disk_write_speed"
+    _attr_native_unit_of_measurement = "B/s"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_suggested_unit_of_measurement = UnitOfInformation.KIBIBYTES
+    _attr_icon = "mdi:upload"
+
+    def __init__(self, coordinator: TerraMasterCoordinator, disk) -> None:
+        super().__init__(coordinator, disk, "write_speed")
+
+    @property
+    def native_value(self) -> int | None:
+        disk = self._disk
+        if not disk or disk.write_speed is None:
+            return None
+        try:
+            return int(disk.write_speed)
+        except (ValueError, TypeError):
+            return None
+
+
+# --- ОСТАЛЬНЫЕ СЕНСОРЫ ---
+
+class TerraMasterVolumeSensor(TerraMasterEntity, SensorEntity):
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(
@@ -281,10 +356,14 @@ class TerraMasterVolumeSensor(TerraMasterEntity, SensorEntity):
             return None
         return {"filesystem": volume.filesystem, "mount_path": volume.mount_path}
 
+    @property
+    def icon(self) -> str:
+        if self._attr_translation_key == "volume_usage":
+            return "mdi:gauge"
+        return "mdi:database"
+
 
 class TerraMasterPoolSensor(TerraMasterEntity, SensorEntity):
-    """Capacity metric for one storage pool."""
-
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(
@@ -313,3 +392,45 @@ class TerraMasterPoolSensor(TerraMasterEntity, SensorEntity):
         if (pool := self._pool) is None:
             return None
         return {"raid_level": pool.level, "health": pool.health, "status": pool.status}
+
+    @property
+    def icon(self) -> str:
+        return "mdi:server"
+
+
+class TerraMasterNetworkIpSensor(TerraMasterEntity, SensorEntity):
+    """IP address of a specific network interface."""
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:ip-network"
+
+    def __init__(self, coordinator: TerraMasterCoordinator, iface: NetworkInterface) -> None:
+        super().__init__(coordinator, f"network_{iface.name}_ip")
+        self._iface_name = iface.name
+        self._attr_translation_key = "network_interface_ip"
+        # Передаем имя интерфейса в перевод
+        self._attr_translation_placeholders = {"interface": iface.name.replace("ovs_", "")}
+
+    @property
+    def native_value(self) -> str | None:
+        iface = next((i for i in self.coordinator.data.network_interfaces if i.name == self._iface_name), None)
+        return iface.ip if iface else None
+
+
+class TerraMasterNetworkSpeedSensor(TerraMasterEntity, SensorEntity):
+    """Link speed of a specific network interface."""
+    _attr_device_class = SensorDeviceClass.DATA_RATE
+    _attr_native_unit_of_measurement = "Mbit/s"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:ethernet"
+
+    def __init__(self, coordinator: TerraMasterCoordinator, iface: NetworkInterface) -> None:
+        super().__init__(coordinator, f"network_{iface.name}_speed")
+        self._iface_name = iface.name
+        self._attr_translation_key = "network_interface_speed"
+        self._attr_translation_placeholders = {"interface": iface.name.replace("ovs_", "")}
+
+    @property
+    def native_value(self) -> int | None:
+        iface = next((i for i in self.coordinator.data.network_interfaces if i.name == self._iface_name), None)
+        return iface.speed_mbps if iface else None

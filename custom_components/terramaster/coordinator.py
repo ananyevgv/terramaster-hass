@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import timedelta
 from typing import Any
 
@@ -22,6 +23,7 @@ from .const import (
 from .tos import TosAuthError, TosClient, TosError
 from .tos.models import (
     NasData,
+    NetworkInterface,
     build_cpu,
     build_disks,
     build_memory,
@@ -59,7 +61,6 @@ class TerraMasterCoordinator(DataUpdateCoordinator[NasData]):
 
     async def _async_update_data(self) -> NasData:
         try:
-            # One login covers the batch; the client re-authenticates on demand.
             results = await asyncio.gather(
                 self.client.hardware(),
                 self.client.temperature(),
@@ -71,9 +72,12 @@ class TerraMasterCoordinator(DataUpdateCoordinator[NasData]):
                 self.client.processor(),
                 self.client.cpu(),
                 self.client.memory(),
+                self.client.network(),
+                self.client.system(),
+                # self.client.disk_speed(),   # <-- временно отключено
+                # self.client.check_updates(), # <-- временно отключено
             )
         except TosAuthError as err:
-            # Starts the reauth flow rather than retrying with dead credentials.
             raise ConfigEntryAuthFailed(
                 f"authentication with the NAS failed: {err}"
             ) from err
@@ -81,10 +85,10 @@ class TerraMasterCoordinator(DataUpdateCoordinator[NasData]):
             raise UpdateFailed(f"error talking to the NAS: {err}") from err
 
         (hardware, temps, status, listing, overview, volumes, pools, cpu,
-         cpu_monitor, memory) = results
+         cpu_monitor, memory, network, system_info) = results
         data = self._assemble(
             hardware, temps, status, listing, overview, volumes, pools, cpu,
-            cpu_monitor, memory,
+            cpu_monitor, memory, network, system_info,
         )
         await self._guard_against_overheating(data, hardware)
         return data
@@ -92,12 +96,6 @@ class TerraMasterCoordinator(DataUpdateCoordinator[NasData]):
     async def _guard_against_overheating(
         self, data: NasData, hardware: dict[str, Any]
     ) -> None:
-        """Hand the fan back to the firmware if the drives get too hot.
-
-        A manual fan level defeats the NAS's own temperature ramp, so a level
-        that was reasonable in winter can cook the array under load. This only
-        ever *increases* cooling, and never touches a fan already in auto mode.
-        """
         if not self._overheat_protection or data.fan_is_auto:
             return
         hottest = data.max_disk_temperature
@@ -133,6 +131,8 @@ class TerraMasterCoordinator(DataUpdateCoordinator[NasData]):
         cpu: dict[str, Any],
         cpu_monitor: dict[str, Any],
         memory: dict[str, Any],
+        network: dict[str, Any],
+        system_info: dict[str, Any],
     ) -> NasData:
         fan = (hardware.get("data") or {}).get("fan") or {}
         temp_data = temps.get("data") or {}
@@ -140,6 +140,44 @@ class TerraMasterCoordinator(DataUpdateCoordinator[NasData]):
         cpu_data = cpu.get("data") or {}
         cpu_percent, cpu_cores = build_cpu(cpu_monitor)
         mem_percent, mem_used, mem_total = build_memory(memory)
+
+        # --- NEW: network (список всех интерфейсов) ---
+        net_list = network.get("data") or []
+        if isinstance(net_list, dict):
+            net_list = [net_list]
+
+        interfaces = []
+        for i in net_list:
+            speed_str = i.get("speed", "")
+            speed_mbps = None
+            if speed_str:
+                match = re.search(r"(\d+)", speed_str)
+                if match:
+                    speed_mbps = int(match.group(1))
+            
+            interfaces.append(
+                NetworkInterface(
+                    name=i.get("eth") or "unknown",
+                    ip=i.get("ipaddress"),
+                    speed_mbps=speed_mbps,
+                    is_up=i.get("online") == 1,
+                    has_gateway=i.get("ip4_gw_state") is True,
+                )
+            )
+
+        # --- NEW: system (version & uptime) ---
+        tos_version = None
+        uptime_seconds = None
+        sys_list = system_info.get("data") or []
+        for item in sys_list:
+            label = item.get("label", [])
+            if "TOSversion" in label:
+                tos_version = item.get("value")
+            elif "startTime" in label:
+                try:
+                    uptime_seconds = int(item.get("value"))
+                except (ValueError, TypeError):
+                    pass
 
         return NasData(
             fan_is_auto=fan.get("is_auto"),
@@ -158,10 +196,12 @@ class TerraMasterCoordinator(DataUpdateCoordinator[NasData]):
             disks=build_disks(status, listing, overview),
             volumes=build_volumes(volumes),
             pools=build_pools(pools),
+            network_interfaces=interfaces,
+            tos_version=tos_version,
+            uptime_seconds=uptime_seconds,
         )
 
     async def async_set_hardware(self, mutate: dict[str, Any]) -> None:
-        """Read-modify-write ``/hardware/``: TOS wants the whole object back."""
         current = dict((await self.client.hardware()).get("data") or {})
         current.update(mutate)
         await self.client.set_hardware(current)

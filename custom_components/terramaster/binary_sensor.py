@@ -24,6 +24,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data
+    # Создаем только сенсоры проблем для дисков
     async_add_entities(
         TerraMasterDiskProblem(coordinator, disk) for disk in coordinator.data.disks
     )
