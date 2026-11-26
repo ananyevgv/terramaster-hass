@@ -105,6 +105,7 @@ Confirm the TOS web interface is reachable from Home Assistant at `http://<host>
 logger:
   logs:
     custom_components.terramaster: debug
+```
 
 After a TOS firmware update, the API may change — see
 [docs/TOS_API.md](docs/TOS_API.md) and run `tools/probe_tos.py` to compare.
