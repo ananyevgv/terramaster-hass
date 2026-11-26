@@ -38,7 +38,7 @@ TOS 5 and earlier are not supported.
 
 ### HACS
 1. HACS → ⋮ → **Custom repositories**
-2. Add `https://github.com/r0-prod/terramaster-hass`, category **Integration**
+2. Add `https://github.com/ananyevgv/terramaster-hass`, category **Integration**
 3. Install **TerraMaster NAS**, then restart Home Assistant.
 
 ### Manual
