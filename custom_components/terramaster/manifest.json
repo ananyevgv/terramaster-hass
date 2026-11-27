@@ -2,7 +2,6 @@
   "domain": "terramaster",
   "name": "TerraMaster NAS",
   "codeowners": [
-    "@r0-prod",
     "@ananyevgv"
   ],
   "config_flow": true,
