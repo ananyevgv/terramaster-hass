@@ -3,12 +3,13 @@
   "name": "TerraMaster NAS",
   "codeowners": [
     "@r0-prod"
+    "ananyevgv"
   ],
   "config_flow": true,
-  "documentation": "https://github.com/r0-prod/terramaster-hass",
+  "documentation": "https://github.com/ananyevgv/terramaster-hass",
   "integration_type": "device",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/r0-prod/terramaster-hass/issues",
+  "issue_tracker": "https://github.com/ananyevgv/terramaster-hass/issues",
   "requirements": [],
   "version": "1.3.1"
 }
