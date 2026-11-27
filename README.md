@@ -5,7 +5,7 @@
 <h1 align="center">TerraMaster NAS for Home Assistant</h1>
 
 <p align="center">
-  <a href="https://github.com/ananyevgv/terramaster-hass/releases"><img src="https://img.shields.io/github/v/release/r0-prod/terramaster-hass?style=flat-square" alt="Release"></a>
+  <a href="https://github.com/ananyevgv/terramaster-hass/releases"><img src="https://img.shields.io/github/v/release/ananyevgv/terramaster-hass?style=flat-square" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/r0-prod/terramaster-hass?style=flat-square" alt="License"></a>
   <a href="https://hacs.xyz"><img src="https://img.shields.io/badge/HACS-custom-41BDF5?style=flat-square" alt="HACS"></a>
 </p>
