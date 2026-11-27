@@ -389,7 +389,8 @@ class TerraMasterNetworkIpSensor(TerraMasterEntity, SensorEntity):
         super().__init__(coordinator, f"network_{iface.name}_ip")
         self._iface_name = iface.name
         self._attr_translation_key = "network_interface_ip"
-        self._attr_translation_placeholders = {"interface": iface.name}
+        # Убираем "ovs_" для отображения (eth0 вместо ovs_eth0)
+        self._attr_translation_placeholders = {"interface": iface.name.replace("ovs_", "")}
 
     @property
     def native_value(self) -> str | None:
@@ -409,7 +410,8 @@ class TerraMasterNetworkSpeedSensor(TerraMasterEntity, SensorEntity):
         super().__init__(coordinator, f"network_{iface.name}_speed")
         self._iface_name = iface.name
         self._attr_translation_key = "network_interface_speed"
-        self._attr_translation_placeholders = {"interface": iface.name}
+        # Убираем "ovs_" для отображения (eth0 вместо ovs_eth0)
+        self._attr_translation_placeholders = {"interface": iface.name.replace("ovs_", "")}
 
     @property
     def native_value(self) -> int | None:
