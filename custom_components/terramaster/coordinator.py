@@ -74,8 +74,6 @@ class TerraMasterCoordinator(DataUpdateCoordinator[NasData]):
                 self.client.memory(),
                 self.client.network(),
                 self.client.system(),
-                # self.client.disk_speed(),   # <-- временно отключено
-                # self.client.check_updates(), # <-- временно отключено
             )
         except TosAuthError as err:
             raise ConfigEntryAuthFailed(
@@ -141,7 +139,7 @@ class TerraMasterCoordinator(DataUpdateCoordinator[NasData]):
         cpu_percent, cpu_cores = build_cpu(cpu_monitor)
         mem_percent, mem_used, mem_total = build_memory(memory)
 
-        # --- NEW: network (список всех интерфейсов) ---
+        # --- network ---
         net_list = network.get("data") or []
         if isinstance(net_list, dict):
             net_list = [net_list]
@@ -165,7 +163,7 @@ class TerraMasterCoordinator(DataUpdateCoordinator[NasData]):
                 )
             )
 
-        # --- NEW: system (version & uptime) ---
+        # --- system ---
         tos_version = None
         uptime_seconds = None
         sys_list = system_info.get("data") or []

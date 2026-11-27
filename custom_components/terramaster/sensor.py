@@ -20,9 +20,15 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import (
+    ChildDeviceInfo,
+    async_get as async_get_device_registry,
+    async_get_device_id_by_identifier,
+)
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import TerraMasterConfigEntry
+from .const import DOMAIN
 from .coordinator import TerraMasterCoordinator
 from .entity import TerraMasterDiskEntity, TerraMasterEntity
 from .tos.models import NasData, NetworkInterface
@@ -107,13 +113,13 @@ SYSTEM_SENSORS: tuple[TerraMasterSensorDescription, ...] = (
         value_fn=lambda data: data.fan_rpm,
         icon="mdi:fan",
     ),
-    #TerraMasterSensorDescription(
-    #    key="tos_version",
-    #    translation_key="tos_version",
-    #    entity_category=EntityCategory.DIAGNOSTIC,
-    #    value_fn=lambda data: data.tos_version,
-    #    icon="mdi:information-outline",
-    #),
+    TerraMasterSensorDescription(
+        key="tos_version",
+        translation_key="tos_version",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.tos_version,
+        icon="mdi:information-outline",
+    ),
     TerraMasterSensorDescription(
         key="uptime",
         translation_key="uptime",
@@ -135,8 +141,7 @@ VOLUME_SENSORS: dict[str, tuple[str, dict]] = {
 }
 
 POOL_SENSORS: dict[str, tuple[str, dict]] = {
-  #  "pool_total": ("total", CAPACITY),
-  #  "pool_free": ("free", CAPACITY),
+    "pool_total": ("total", CAPACITY),
 }
 
 
@@ -156,9 +161,6 @@ async def async_setup_entry(
         entities.append(TerraMasterDiskTemperature(coordinator, disk))
         entities.append(TerraMasterDiskPowerOnHours(coordinator, disk))
         entities.append(TerraMasterDiskCapacity(coordinator, disk))
-        # Сенсоры скорости дисков (раскомментируйте, если нужно)
-        # entities.append(TerraMasterDiskReadSpeed(coordinator, disk))
-        # entities.append(TerraMasterDiskWriteSpeed(coordinator, disk))
 
     entities.extend(
         TerraMasterVolumeSensor(coordinator, volume, key)
@@ -171,9 +173,7 @@ async def async_setup_entry(
         for key in POOL_SENSORS
     )
 
-    # --- NEW: sensors for each network interface ---
     for iface in data.network_interfaces:
-        # Пропускаем пустые интерфейсы (PPPoE и т.д.)
         if not iface.ip and not iface.speed_mbps:
             continue
         entities.append(TerraMasterNetworkIpSensor(coordinator, iface))
@@ -271,56 +271,6 @@ class TerraMasterDiskCapacity(TerraMasterDiskEntity, SensorEntity):
         return disk.capacity_bytes if disk else None
 
 
-# --- НОВЫЕ СЕНСОРЫ СКОРОСТИ ДИСКОВ (пока отключены в async_setup_entry) ---
-
-class TerraMasterDiskReadSpeed(TerraMasterDiskEntity, SensorEntity):
-    """Read speed of one physical drive."""
-    _attr_translation_key = "disk_read_speed"
-    _attr_native_unit_of_measurement = "B/s"
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_suggested_unit_of_measurement = UnitOfInformation.KIBIBYTES
-    _attr_icon = "mdi:download"
-
-    def __init__(self, coordinator: TerraMasterCoordinator, disk) -> None:
-        super().__init__(coordinator, disk, "read_speed")
-
-    @property
-    def native_value(self) -> int | None:
-        disk = self._disk
-        if not disk or disk.read_speed is None:
-            return None
-        try:
-            return int(disk.read_speed)
-        except (ValueError, TypeError):
-            return None
-
-
-class TerraMasterDiskWriteSpeed(TerraMasterDiskEntity, SensorEntity):
-    """Write speed of one physical drive."""
-    _attr_translation_key = "disk_write_speed"
-    _attr_native_unit_of_measurement = "B/s"
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_suggested_unit_of_measurement = UnitOfInformation.KIBIBYTES
-    _attr_icon = "mdi:upload"
-
-    def __init__(self, coordinator: TerraMasterCoordinator, disk) -> None:
-        super().__init__(coordinator, disk, "write_speed")
-
-    @property
-    def native_value(self) -> int | None:
-        disk = self._disk
-        if not disk or disk.write_speed is None:
-            return None
-        try:
-            return int(disk.write_speed)
-        except (ValueError, TypeError):
-            return None
-
-
-# --- ОСТАЛЬНЫЕ СЕНСОРЫ ---
-
 class TerraMasterVolumeSensor(TerraMasterEntity, SensorEntity):
     _attr_state_class = SensorStateClass.MEASUREMENT
 
@@ -334,11 +284,27 @@ class TerraMasterVolumeSensor(TerraMasterEntity, SensorEntity):
         self._attribute, extra = VOLUME_SENSORS[translation_key]
         for name, value in extra.items():
             setattr(self, f"_attr_{name}", value)
+        self._volume_identifier = (DOMAIN, f"{coordinator.entry.entry_id}_volume_{volume.uuid}")
+        self._volume_name = volume.name
 
     @property
     def _volume(self):
         return next(
             (v for v in self.coordinator.data.volumes if v.uuid == self._uuid), None
+        )
+
+    @property
+    def device_info(self) -> ChildDeviceInfo:
+        registry = async_get_device_registry(self.hass)
+        parent_device_id = async_get_device_id_by_identifier(
+            self.hass,
+            (DOMAIN, self.coordinator.entry.entry_id),
+            config_entry_id=self.coordinator.entry.entry_id,
+        )
+        return ChildDeviceInfo(
+            identifiers={self._volume_identifier},
+            name=self._volume_name,
+            parent_device_id=parent_device_id,
         )
 
     @property
@@ -376,11 +342,27 @@ class TerraMasterPoolSensor(TerraMasterEntity, SensorEntity):
         self._attribute, extra = POOL_SENSORS[translation_key]
         for name, value in extra.items():
             setattr(self, f"_attr_{name}", value)
+        self._pool_identifier = (DOMAIN, f"{coordinator.entry.entry_id}_pool_{pool.uuid}")
+        self._pool_name = pool.name
 
     @property
     def _pool(self):
         return next(
             (p for p in self.coordinator.data.pools if p.uuid == self._uuid), None
+        )
+
+    @property
+    def device_info(self) -> ChildDeviceInfo:
+        registry = async_get_device_registry(self.hass)
+        parent_device_id = async_get_device_id_by_identifier(
+            self.hass,
+            (DOMAIN, self.coordinator.entry.entry_id),
+            config_entry_id=self.coordinator.entry.entry_id,
+        )
+        return ChildDeviceInfo(
+            identifiers={self._pool_identifier},
+            name=self._pool_name,
+            parent_device_id=parent_device_id,
         )
 
     @property
@@ -407,8 +389,7 @@ class TerraMasterNetworkIpSensor(TerraMasterEntity, SensorEntity):
         super().__init__(coordinator, f"network_{iface.name}_ip")
         self._iface_name = iface.name
         self._attr_translation_key = "network_interface_ip"
-        # Передаем имя интерфейса в перевод
-        self._attr_translation_placeholders = {"interface": iface.name.replace("ovs_", "")}
+        self._attr_translation_placeholders = {"interface": iface.name}
 
     @property
     def native_value(self) -> str | None:
@@ -428,7 +409,7 @@ class TerraMasterNetworkSpeedSensor(TerraMasterEntity, SensorEntity):
         super().__init__(coordinator, f"network_{iface.name}_speed")
         self._iface_name = iface.name
         self._attr_translation_key = "network_interface_speed"
-        self._attr_translation_placeholders = {"interface": iface.name.replace("ovs_", "")}
+        self._attr_translation_placeholders = {"interface": iface.name}
 
     @property
     def native_value(self) -> int | None:
