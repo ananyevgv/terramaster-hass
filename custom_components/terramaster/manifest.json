@@ -2,7 +2,8 @@
   "domain": "terramaster",
   "name": "TerraMaster NAS",
   "codeowners": [
-    "ananyevgv"
+    "@r0-prod"
+    "@ananyevgv"
   ],
   "config_flow": true,
   "documentation": "https://github.com/ananyevgv/terramaster-hass",
